@@ -1,3 +1,5 @@
+//Now we are using Bluetooth rather than 
+//Infrared Ray to control the device
 #include <Servo.h>
 
 #include <boarddefs.h>
@@ -5,8 +7,6 @@
 #include <IRremoteInt.h>
 #include <ir_Lego_PF_BitStreamEncoder.h>
 
-
-int REC_PIN=11;            //红外接收器OUTPUT端接在pin11
 int ENA=5;                 //定义数字接口
 int IN1=6;
 int IN2=7;
@@ -15,36 +15,32 @@ int IN3=9;
 int IN4=10;
 int TrigPin = 12; 
 int EchoPin = 13;
-
-IRrecv irrecv(REC_PIN);   //定义IRrecv对象来接收红外线信号
+char val=0,state=0;
 Servo esc;
-decode_results results;  //解码结果放在decode_results构造的对象results里
 float distanceNEW=0,distanceOLD=0;                
 
 void setup() {
   
-  Serial.begin(9600);
+  Serial.begin(38400);
   pinMode(ENA,OUTPUT);
   pinMode(IN1,OUTPUT);
   pinMode(IN2,OUTPUT);
   pinMode(ENB,OUTPUT);
   pinMode(IN3,OUTPUT);
   pinMode(IN4,OUTPUT);     //数字IO口输入输出模式定义，假设左边为A12，右边为B34
-  pinMode(11,OUTPUT);      //设置11口为红外输出端口
-  pinMode(TrigPin,OUTPUT);
+  pinMode(11,OUTPUT);
+  pinMode(TrigPin,OUTPUT);//For ultrasonic signal
   pinMode(EchoPin,INPUT);
-  Serial.println("Ultrasonic sensor:");
   esc.attach(3);
-  esc.writeMicroseconds(2000);
-  Serial.print("max");
-  delay(1000);
-  esc.writeMicroseconds(1000);
-  delay(2000);
-  esc.writeMicroseconds(2000);
-  Serial.print("end");
-  irrecv.enableIRIn();     //启动红外解码
+  //irrecv.enableIRIn();     //启动红外解码
 }
+void LightOn(){
+  digitalWrite(11,HIGH);
+  delay(1000);
+  digitalWrite(11,LOW);
 
+  
+}
 void findKG(){
    digitalWrite(TrigPin, LOW);
    delayMicroseconds(2);
@@ -52,15 +48,18 @@ void findKG(){
    delayMicroseconds(10);
    digitalWrite(TrigPin, LOW);
     // 检测脉冲宽度，并计算出距离
-   distanceNEW = pulseIn(EchoPin, HIGH) / 58.00;
+   int distance = pulseIn(EchoPin, HIGH);
+   distanceNEW = distance / 58.00;
+   //Serial.println(distanceNEW);
    if(distanceNEW>200)distanceNEW=distanceOLD;
    else if(distanceOLD==0){
     distanceOLD=distanceNEW;
    }
-   else if(distanceOLD-distanceNEW>=1||distanceNEW-distanceOLD>=1){
-    Serial.println("KongGu");
+   else if(distanceOLD-distanceNEW>=0.5||distanceNEW-distanceOLD>=0.5){
+    LightOn();
    }
    distanceOLD=distanceNEW;
+   delay(100);
 }
 /*前进子程序,左正右反，对应按键1*/
 void Forward(void){
@@ -117,40 +116,30 @@ void Stop(void){
 }
 
 void loop() {
-   esc.writeMicroseconds(1500);
-   if(irrecv.decode(&results)){                //解码成功，收到一组红外线信号，把数据放入results变量中
-       Serial.print("1");
-       Serial.println(results.value);
-       if(results.value==16724175){            //确认接收到按键1的编码，执行前进命令
-            Forward();      
-            Serial.println(results.value);              
+   //esc.writeMicroseconds(2000);
+   if(Serial.available()){                //解码成功，收到一组红外线信号，把数据放入results变量中
+       state=Serial.read();
+   }
+   if(state=='2'){            //确认接收到按键2，执行前进命令
+            Forward();                    
        }
            
-       else if(results.value==16718055){       //确认接收到按键2的编码，执行后退命令
-            Back();
-            Serial.println(results.value);                 
+    else if(state=='8'){       //确认接收到按键8，执行后退命令
+            Back();                 
        }
           
-       else if(results.value==16743045){       //确认接受到按键3的编码，执行左转命令
+       else if(state=='4'){       //确认接受到按键4，执行左转命令
             Left();           
-            Serial.println(results.value);                
        }
        
-       else if(results.value==16716015){       //确认接受到按键4的编码，执行右转命令
-          
-            Right();      
-            Serial.println(results.value);           
+       else if(state=='6'){       //确认接受到按键6，执行右转命令
+            Right();
        }
           
-       else if(results.value==16726215){       //确认接受到按键5的编码，执行刹车命令
+       else if(state=='0'){       //确认接受到按键0，执行刹车命令
             Stop();
- 
-            Serial.print(results.value);                 
        } 
-       
-       irrecv.resume();                        //接收下一个值                    
-   }            
-   delay(60); //延时，做一个简单的消抖
-   findKG();
+        delay(60); //延时，做一个简单的消抖
+        findKG();  //检测空鼓存在性
  }
  
